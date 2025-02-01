@@ -28,29 +28,9 @@ def _pdist(a, b):
     return r2
 
 
-def _cosine_distance(a, b, data_is_normalized=False):
-    """Compute pair-wise cosine distance between points in `a` and `b`.
-
-    Parameters
-    ----------
-    a : array_like
-        An NxM matrix of N samples of dimensionality M.
-    b : array_like
-        An LxM matrix of L samples of dimensionality M.
-    data_is_normalized : Optional[bool]
-        If True, assumes rows in a and b are unit length vectors.
-        Otherwise, a and b are explicitly normalized to lenght 1.
-
-    Returns
-    -------
-    ndarray
-        Returns a matrix of size len(a), len(b) such that eleement (i, j)
-        contains the squared distance between `a[i]` and `b[j]`.
-
-    """
-    if not data_is_normalized:
-        a = np.asarray(a) / np.linalg.norm(a, axis=1, keepdims=True)
-        b = np.asarray(b) / np.linalg.norm(b, axis=1, keepdims=True)
+def _cosine_distance(a, b):
+    a = np.asarray(a).reshape(-1, 128)  # Ensure shape (N, 128)
+    b = np.asarray(b).reshape(-1, 128)  # Ensure shape (M, 128)
     return 1. - np.dot(a, b.T)
 
 

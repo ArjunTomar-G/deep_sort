@@ -87,3 +87,8 @@ ENV/
 
 # Rope project settings
 .ropeproject
+tus.mp4 
+tus2.mp4 
+tus3.mp4 
+tus4.mp4
+deep_sort/resources/networks/mars-small128.pb
