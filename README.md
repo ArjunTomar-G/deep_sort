@@ -1,141 +1,109 @@
-# Deep SORT
 
-## Introduction
+# Person ID Tracking System
 
-This repository contains code for *Simple Online and Realtime Tracking with a Deep Association Metric* (Deep SORT).
-We extend the original [SORT](https://github.com/abewley/sort) algorithm to
-integrate appearance information based on a deep appearance descriptor.
-See the [arXiv preprint](https://arxiv.org/abs/1703.07402) for more information.
+## Overview
+This system implements a robust person tracking and identification solution using YOLO object detection, deep feature embeddings, and similarity matching. The system is designed to track and maintain consistent IDs for people across video frames, even when they leave and re-enter the frame.
 
-## Dependencies
+## Features
+- Real-time person detection using YOLO
+- Persistent ID assignment using deep feature embeddings
+- Automatic frame capture of first appearances
+- Cosine similarity-based re-identification
+- Support for high-resolution video processing
+- Frame skipping capability for performance optimization
 
-The code is compatible with Python 2.7 and 3. The following dependencies are
-needed to run the tracker:
+## Requirements
+- Python 3.7+
+- PyTorch
+- OpenCV (cv2)
+- Ultralytics YOLO
+- ONNX Runtime
+- scikit-learn
+- PIL (Python Imaging Library)
+- NumPy
+- DeepSORT tracking framework
 
-* NumPy
-* sklearn
-* OpenCV
-
-Additionally, feature generation requires TensorFlow (>= 1.0).
+## Model Requirements
+- YOLO model trained for person detection (`best_body.pt`)
+- ONNX Re-ID model for feature extraction (`nvidia_reid_model_modified.onnx`)
 
 ## Installation
-
-First, clone the repository:
+1. Install the required Python packages:
+```bash
+pip install torch opencv-python ultralytics onnxruntime scikit-learn pillow numpy
 ```
-git clone https://github.com/nwojke/deep_sort.git
+
+2. Place the required model files in your project directory:
+   - YOLO model (`best_body.pt`)
+   - Re-ID ONNX model (`nvidia_reid_model_modified.onnx`)
+
+## Configuration
+Key parameters that can be adjusted:
+- `yolo_conf_threshold`: Confidence threshold for YOLO detections (default: 0.7)
+- `matching_threshold`: Threshold for the cosine similarity matching (default: 0.25)
+- `frame_skip`: Number of frames to skip during processing (default: 1)
+- `max_age`: Maximum number of frames to keep track of disappeared objects (default: 60)
+
+## Usage
+1. Update the `video_path` variable with your input video file path
+2. Run the script:
+```bash
+python pipeline.py
 ```
-Then, download pre-generated detections and the CNN checkpoint file from
-[here](https://drive.google.com/open?id=18fKzfqnqhqW3s9zwsCbnVJ5XF2JFeqMp).
 
-*NOTE:* The candidate object locations of our pre-generated detections are
-taken from the following paper:
+## How It Works
+1. **Person Detection**: 
+   - YOLO model detects people in each frame
+   - Only the largest detected person is tracked to avoid confusion
+
+2. **Feature Extraction**:
+   - Crops detected person from frame
+   - Processes through Re-ID model to extract feature embeddings
+   - Normalizes embeddings for consistent comparison
+
+3. **ID Assignment**:
+   - New persons get new sequential IDs
+   - Returning persons are matched using cosine similarity
+   - High similarity (>0.8) indicates same person
+
+4. **Output**:
+   - Displays real-time tracking with bounding boxes and IDs
+   - Saves first appearance of each unique ID to `tracked_frames` directory
+   - Shows tracking visualization in real-time
+
+## Output Directory Structure
 ```
-F. Yu, W. Li, Q. Li, Y. Liu, X. Shi, J. Yan. POI: Multiple Object Tracking with
-High Performance Detection and Appearance Feature. In BMTT, SenseTime Group
-Limited, 2016.
+tracked_frames/
+├── ID_1.jpg
+├── ID_2.jpg
+├── ID_3.jpg
+...
 ```
-We have replaced the appearance descriptor with a custom deep convolutional
-neural network (see below).
 
-## Running the tracker
+## Limitations
+- Currently tracks only the largest detected person in frame
+- May struggle with very crowded scenes
+- Requires good lighting conditions for optimal performance
+- Processing speed depends on hardware capabilities
 
-The following example starts the tracker on one of the
-[MOT16 benchmark](https://motchallenge.net/data/MOT16/)
-sequences.
-We assume resources have been extracted to the repository root directory and
-the MOT16 benchmark data is in `./MOT16`:
-```
-python deep_sort_app.py \
-    --sequence_dir=./MOT16/test/MOT16-06 \
-    --detection_file=./resources/detections/MOT16_POI_test/MOT16-06.npy \
-    --min_confidence=0.3 \
-    --nn_budget=100 \
-    --display=True
-```
-Check `python deep_sort_app.py -h` for an overview of available options.
-There are also scripts in the repository to visualize results, generate videos,
-and evaluate the MOT challenge benchmark.
+## Performance Optimization
+- Adjust `frame_skip` for faster processing
+- Modify `yolo_conf_threshold` for detection accuracy
+- Tune `matching_threshold` for ID consistency
 
-## Generating detections
+## Troubleshooting
+1. If the video doesn't open:
+   - Check if the video path is correct
+   - Ensure video file format is supported by OpenCV
 
-Beside the main tracking application, this repository contains a script to
-generate features for person re-identification, suitable to compare the visual
-appearance of pedestrian bounding boxes using cosine similarity.
-The following example generates these features from standard MOT challenge
-detections. Again, we assume resources have been extracted to the repository
-root directory and MOT16 data is in `./MOT16`:
-```
-python tools/generate_detections.py \
-    --model=resources/networks/mars-small128.pb \
-    --mot_dir=./MOT16/train \
-    --output_dir=./resources/detections/MOT16_train
-```
-The model has been generated with TensorFlow 1.5. If you run into
-incompatibility, re-export the frozen inference graph to obtain a new
-`mars-small128.pb` that is compatible with your version:
-```
-python tools/freeze_model.py
-```
-The ``generate_detections.py`` stores for each sequence of the MOT16 dataset
-a separate binary file in NumPy native format. Each file contains an array of
-shape `Nx138`, where N is the number of detections in the corresponding MOT
-sequence. The first 10 columns of this array contain the raw MOT detection
-copied over from the input file. The remaining 128 columns store the appearance
-descriptor. The files generated by this command can be used as input for the
-`deep_sort_app.py`.
+2. If tracking is inconsistent:
+   - Adjust the matching threshold
+   - Increase YOLO confidence threshold
+   - Check lighting conditions
 
-**NOTE**: If ``python tools/generate_detections.py`` raises a TensorFlow error,
-try passing an absolute path to the ``--model`` argument. This might help in
-some cases.
-
-## Training the model
-
-To train the deep association metric model we used a novel [cosine metric learning](https://github.com/nwojke/cosine_metric_learning) approach which is provided as a separate repository.
-
-## Highlevel overview of source files
-
-In the top-level directory are executable scripts to execute, evaluate, and
-visualize the tracker. The main entry point is in `deep_sort_app.py`.
-This file runs the tracker on a MOTChallenge sequence.
-
-In package `deep_sort` is the main tracking code:
-
-* `detection.py`: Detection base class.
-* `kalman_filter.py`: A Kalman filter implementation and concrete
-   parametrization for image space filtering.
-* `linear_assignment.py`: This module contains code for min cost matching and
-   the matching cascade.
-* `iou_matching.py`: This module contains the IOU matching metric.
-* `nn_matching.py`: A module for a nearest neighbor matching metric.
-* `track.py`: The track class contains single-target track data such as Kalman
-  state, number of hits, misses, hit streak, associated feature vectors, etc.
-* `tracker.py`: This is the multi-target tracker class.
-
-The `deep_sort_app.py` expects detections in a custom format, stored in .npy
-files. These can be computed from MOTChallenge detections using
-`generate_detections.py`. We also provide
-[pre-generated detections](https://drive.google.com/open?id=1VVqtL0klSUvLnmBKS89il1EKC3IxUBVK).
-
-## Citing DeepSORT
-
-If you find this repo useful in your research, please consider citing the following papers:
-
-    @inproceedings{Wojke2017simple,
-      title={Simple Online and Realtime Tracking with a Deep Association Metric},
-      author={Wojke, Nicolai and Bewley, Alex and Paulus, Dietrich},
-      booktitle={2017 IEEE International Conference on Image Processing (ICIP)},
-      year={2017},
-      pages={3645--3649},
-      organization={IEEE},
-      doi={10.1109/ICIP.2017.8296962}
-    }
-
-    @inproceedings{Wojke2018deep,
-      title={Deep Cosine Metric Learning for Person Re-identification},
-      author={Wojke, Nicolai and Bewley, Alex},
-      booktitle={2018 IEEE Winter Conference on Applications of Computer Vision (WACV)},
-      year={2018},
-      pages={748--756},
-      organization={IEEE},
-      doi={10.1109/WACV.2018.00087}
-    }
+## Future Improvements
+- Multi-person tracking support
+- GPU acceleration
+- Real-time performance optimization
+- Support for multiple camera views
+- Integration with database for long-term storage
